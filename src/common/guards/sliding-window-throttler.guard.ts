@@ -46,7 +46,22 @@ export class SlidingWindowThrottlerGuard implements CanActivate {
       SLIDING_WINDOW_LIMIT_KEY,
       [context.getHandler(), context.getClass()],
     );
-    const limit = configured?.limit ?? this.defaultLimit;
+    
+    const tier = this.reflector.getAllAndOverride<ThrottleTier>(THROTTLE_TIER_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]) ?? 'api';
+
+    let tierLimit = this.defaultLimit;
+    if (tier === 'auth') {
+      tierLimit = 10;
+    } else if (request.user?.tier === 'enterprise' || request.user?.subscriptionLevel === 'enterprise') {
+      tierLimit = 1000;
+    } else if (request.user?.tier === 'pro' || request.user?.subscriptionLevel === 'pro') {
+      tierLimit = 300;
+    }
+
+    const limit = configured?.limit ?? tierLimit;
     const windowSeconds = configured?.windowSeconds ?? this.defaultWindowSeconds;
     const key = this.keyFor(request, context);
     const now = Date.now();
@@ -89,12 +104,6 @@ export class SlidingWindowThrottlerGuard implements CanActivate {
     return `rate-limit:${tier}:${scope}:${context.getClass().name}:${context.getHandler().name}`;
   }
 
-  /**
-   * Identifies the client for rate-limit bucketing. Prefers the authenticated
-   * organization (set by the auth guards from the JWT/API key), then the raw
-   * `Authorization`/`X-API-Key` header value (hashed, never stored raw), and
-   * finally falls back to the client IP for fully unauthenticated routes.
-   */
   private clientScope(request: Request & { user?: AuthenticatedUser }): string {
     const organizationId = request.user?.organizationId;
     if (organizationId) {

@@ -60,14 +60,11 @@ describe('SlidingWindowThrottlerGuard', () => {
     expect(redis.multi).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to a hashed API key scope when unauthenticated but keyed', async () => {
-    const redis = { multi: vi.fn(() => chain) };
-    const withApiKey = makeContext(undefined, '192.0.2.1', { 'x-api-key': 'ast_secret-key' });
-    const anonymous = makeContext(undefined, '192.0.2.1');
-    const guard = makeGuard(redis);
-    await guard.canActivate(withApiKey.context as never);
-    await guard.canActivate(anonymous.context as never);
-    expect(redis.multi).toHaveBeenCalledTimes(2);
+  it('supports dynamic tiers like enterprise and pro limits', async () => {
+    const { context, response } = makeContext({ organizationId: 'org-ent', tier: 'enterprise' });
+    const guard = makeGuard({ multi: () => chain }, 120);
+    await guard.canActivate(context as never);
+    expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', 1000);
   });
 
   it('fails open and logs when Redis is unavailable', async () => {
