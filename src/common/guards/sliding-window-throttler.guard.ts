@@ -44,9 +44,14 @@ export class SlidingWindowThrottlerGuard implements CanActivate {
     const response = context.switchToHttp().getResponse<Response>();
     const configured = this.reflector.getAllAndOverride<{ limit: number; windowSeconds: number }>(
       SLIDING_WINDOW_LIMIT_KEY,
-      [context.getHandler(), context.getClass()],
+      [context.getHandler(), context.getClass],
     );
-    const limit = configured?.limit ?? this.defaultLimit;
+    const tier = this.reflector.getAllAndOverride<ThrottleTier>(THROTTLE_TIER_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]) ?? 'api';
+    const dynamicLimit = this.resolveTierLimit(tier, request);
+    const limit = configured?.limit ?? dynamicLimit ?? this.defaultLimit;
     const windowSeconds = configured?.windowSeconds ?? this.defaultWindowSeconds;
     const key = this.keyFor(request, context);
     const now = Date.now();
@@ -78,6 +83,18 @@ export class SlidingWindowThrottlerGuard implements CanActivate {
       response.setHeader('X-RateLimit-Remaining', limit);
       return true;
     }
+  }
+
+  private resolveTierLimit(tier: ThrottleTier, request: Request & { user?: AuthenticatedUser } & { apiKey?: { tier?: string } }): number | undefined {
+    const userTier = request.user?.tier ?? request.apiKey?.tier ?? (request.user as any)?.subscriptionTier;
+    if (userTier) {
+      const normalized = String(userTier).toLowerCase();
+      if (normalized === 'enterprise' || normalized === 'unlimited') return 1000;
+      if (normalized === 'pro' || normalized === 'growth') return 300;
+      if (normalized === 'free' || normalized === 'basic') return 60;
+    }
+    if (tier === 'auth') return 20;
+    return this.defaultLimit;
   }
 
   private keyFor(request: Request & { user?: AuthenticatedUser }, context: ExecutionContext): string {
