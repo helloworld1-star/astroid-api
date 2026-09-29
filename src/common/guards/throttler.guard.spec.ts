@@ -166,6 +166,43 @@ describe('AstroidThrottlerGuard', () => {
       expect(response.header).toHaveBeenCalledWith('X-RateLimit-Remaining-api', 9);
       expect(response.header).toHaveBeenCalledWith('X-RateLimit-Reset-api', 60);
     });
+
+    it('adjusts rate limits dynamically based on user tier', async () => {
+      const increment = vi.fn().mockResolvedValue(UNBLOCKED);
+      const reflector = { getAllAndOverride: vi.fn().mockReturnValue(undefined) };
+      const guard = new AstroidThrottlerGuard(
+        createThrottlerOptions(CONFIG),
+        { increment } as never,
+        reflector as never,
+      );
+      await guard.onModuleInit();
+
+      const response: MockResponse = { header: vi.fn() };
+      const context = buildContext({ ip: '203.0.113.7', headers: {}, user: { organizationId: 'org-1', tier: 'enterprise' } }, response);
+      const { getTracker, generateKey } = (
+        guard as unknown as {
+          commonOptions: Pick<ThrottlerRequest, 'getTracker' | 'generateKey'>;
+        }
+      ).commonOptions;
+
+      await guard['handleRequest']({
+        context,
+        limit: 10,
+        ttl: 60_000,
+        throttler: throttlerNamed('api'),
+        blockDuration: 60_000,
+        getTracker,
+        generateKey,
+      } as ThrottlerRequest);
+
+      expect(increment).toHaveBeenCalledWith(
+        expect.any(String),
+        60_000,
+        1000,
+        60_000,
+        'api',
+      );
+    });
   });
 
   describe('handleRequest throttled responses', () => {
