@@ -162,6 +162,9 @@ describe('AstroidThrottlerGuard', () => {
 
       await call(throttlerNamed('api'));
 
+      expect(response.header).toHaveBeenCalledWith('X-RateLimit-Limit', 10);
+      expect(response.header).toHaveBeenCalledWith('X-RateLimit-Remaining', 9);
+      expect(response.header).toHaveBeenCalledWith('X-RateLimit-Reset', 60);
       expect(response.header).toHaveBeenCalledWith('X-RateLimit-Limit-api', 10);
       expect(response.header).toHaveBeenCalledWith('X-RateLimit-Remaining-api', 9);
       expect(response.header).toHaveBeenCalledWith('X-RateLimit-Reset-api', 60);
