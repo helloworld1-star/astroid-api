@@ -79,4 +79,11 @@ describe('SlidingWindowThrottlerGuard', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('allowing request'));
     expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Remaining', 2);
   });
+
+  it('extracts dynamic limits based on user/API key tier', async () => {
+    const { context, response } = makeContext({ organizationId: 'org-2', tier: 'enterprise' });
+    const guard = makeGuard({ multi: () => chain }, 10);
+    expect(await guard.canActivate(context as never)).toBe(true);
+    expect(response.setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', 1000);
+  });
 });
